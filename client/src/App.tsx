@@ -13,10 +13,12 @@ import ReactFlow, {
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import axios from 'axios';
+import { LandingPage } from './components/LandingPage';
 
 const API_BASE_URL = 'http://localhost:5001/api';
 
 const App: React.FC = () => {
+  const [view, setView] = useState<'landing' | 'map'>('landing');
   const [nodes, setNodes] = useState<Node[]>([]);
   const [edges, setEdges] = useState<Edge[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -103,11 +105,23 @@ const App: React.FC = () => {
     setSearchQuery('');
   };
 
+  if (view === 'landing') {
+    return <LandingPage onStart={() => setView('map')} />;
+  }
+
   return (
     <div className="flex flex-col h-screen w-screen bg-gray-900 text-white">
       {/* Header / Search */}
       <header className="p-4 bg-gray-800 flex items-center justify-between shadow-md z-10">
-        <h1 className="text-2xl font-bold text-green-500">Music Discovery Map</h1>
+        <div className="flex items-center gap-4">
+          <h1 className="text-2xl font-bold text-green-500">Music Discovery Map</h1>
+          <button 
+            onClick={() => setView('landing')} 
+            className="text-xs bg-gray-700 hover:bg-gray-600 px-3 py-1.5 rounded-lg text-gray-300 hover:text-white transition font-medium cursor-pointer"
+          >
+            ← Back to Home
+          </button>
+        </div>
         <form onSubmit={handleSearch} className="relative flex gap-2">
           <input
             type="text"
