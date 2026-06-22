@@ -643,10 +643,8 @@ const App: React.FC = () => {
           </span>
         </div>
 
-        {/* Center Navigation Tabs */}
         <nav className="flex items-center gap-1 bg-gray-950 p-1 rounded-xl border border-white/5">
           {[
-            { id: 'landing', label: '🏠 Home' },
             { id: 'map', label: '🗺️ Map' },
             { id: 'explore', label: '👥 Explore' },
             { id: 'saved-maps', label: '📁 Saved Maps' },
