@@ -444,22 +444,30 @@ const App: React.FC = () => {
     setSearchQuery('');
   };
 
-  if (view === 'landing') {
-    return <LandingPage onStart={() => setView('map')} />;
-  }
-
   return (
-    <div className="flex flex-col h-screen w-screen bg-gray-900 text-white select-none">
-      {/* Header / Search */}
+    <>
+      {view === 'landing' ? (
+        <LandingPage 
+          onStart={() => setView('map')} 
+          user={user}
+          onLoginClick={() => {
+            setAuthError(null);
+            setAuthMode('login');
+            setAuthModalOpen(true);
+          }}
+          onLogout={handleLogout}
+        />
+      ) : (
+        <div className="flex flex-col h-screen w-screen bg-gray-900 text-white select-none">
+          {/* Header / Search */}
       <header className="p-4 bg-gray-800 flex items-center justify-between shadow-md z-10">
         <div className="flex items-center gap-4">
-          <h1 className="text-2xl font-bold text-green-500">Music Discovery Map</h1>
-          <button 
+          <h1 
             onClick={() => setView('landing')} 
-            className="text-xs bg-gray-700 hover:bg-gray-600 px-3 py-1.5 rounded-lg text-gray-300 hover:text-white transition font-medium cursor-pointer"
+            className="text-2xl font-bold text-green-500 cursor-pointer hover:text-green-400 transition"
           >
-            ← Back to Home
-          </button>
+            Music Discovery Map
+          </h1>
         </div>
         
         {/* Right Header Navigation Panel */}
@@ -495,10 +503,10 @@ const App: React.FC = () => {
           </form>
 
           {/* User Auth Dropdown */}
-          {user ? (
+          {user && (
             <div className="relative group">
               <button className="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded-lg font-semibold flex items-center gap-2 transition cursor-pointer">
-                <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
+                <span className="w-2.5 h-2.5 rounded-full bg-green-500 animate-pulse"></span>
                 {user.username}
                 <svg className="w-4 h-4 text-gray-400 group-hover:text-white transition" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
@@ -543,17 +551,6 @@ const App: React.FC = () => {
                 </button>
               </div>
             </div>
-          ) : (
-            <button 
-              onClick={() => {
-                setAuthError(null);
-                setAuthMode('login');
-                setAuthModalOpen(true);
-              }}
-              className="bg-green-500 hover:bg-green-600 px-4 py-2 rounded-lg font-bold text-black transition cursor-pointer text-sm"
-            >
-              Sign In
-            </button>
           )}
         </div>
       </header>
@@ -874,12 +871,21 @@ const App: React.FC = () => {
             </>
           )}
         </div>
-        
-        {/* ==========================================
-            Modals & Drawer Subcomponents
-        ========================================== */}
 
-        {/* 1. Auth Login/Register Modal */}
+        {nodes.length === 0 && (
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+            <p className="text-gray-500 text-xl font-medium">Search and add an artist to start your map</p>
+          </div>
+        )}
+      </main>
+    </div>
+      )}
+
+      {/* ==========================================
+          Modals & Drawer Subcomponents
+      ========================================== */}
+
+      {/* 1. Auth Login/Register Modal */}
         {authModalOpen && (
           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
             <div className="bg-gray-950 border border-white/10 w-full max-w-md rounded-2xl p-6 shadow-2xl relative">
@@ -1262,14 +1268,7 @@ const App: React.FC = () => {
             </div>
           </div>
         )}
-
-        {nodes.length === 0 && (
-          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <p className="text-gray-500 text-xl font-medium">Search and add an artist to start your map</p>
-          </div>
-        )}
-      </main>
-    </div>
+    </>
   );
 };
 

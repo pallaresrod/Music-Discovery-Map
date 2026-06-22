@@ -2,9 +2,12 @@ import React from 'react';
 
 interface LandingPageProps {
   onStart: () => void;
+  user: any | null;
+  onLoginClick: () => void;
+  onLogout: () => void;
 }
 
-export const LandingPage: React.FC<LandingPageProps> = ({ onStart }) => {
+export const LandingPage: React.FC<LandingPageProps> = ({ onStart, user, onLoginClick, onLogout }) => {
   return (
     <div className="relative min-h-screen w-full bg-slate-950 text-white flex flex-col justify-between overflow-hidden">
       {/* Background Ambient Glows */}
@@ -22,6 +25,28 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStart }) => {
           <span className="font-semibold text-lg tracking-wider bg-gradient-to-r from-white to-gray-300 bg-clip-text text-transparent">
             Music Discovery Map
           </span>
+        </div>
+        
+        {/* Auth Actions on Landing */}
+        <div className="flex items-center">
+          {user ? (
+            <div className="flex items-center gap-4">
+              <span className="text-sm font-semibold text-gray-300">Hello, {user.username}</span>
+              <button 
+                onClick={onLogout}
+                className="bg-white/5 border border-white/10 hover:bg-white/10 hover:border-white/20 px-4 py-2 rounded-full text-xs font-bold tracking-wider uppercase transition cursor-pointer text-gray-300 hover:text-white"
+              >
+                Sign Out
+              </button>
+            </div>
+          ) : (
+            <button 
+              onClick={onLoginClick}
+              className="bg-green-500 hover:bg-green-400 text-black px-6 py-2 rounded-full text-xs font-bold uppercase tracking-wider transition duration-300 transform hover:scale-105 active:scale-95 cursor-pointer"
+            >
+              Sign In
+            </button>
+          )}
         </div>
       </header>
 
