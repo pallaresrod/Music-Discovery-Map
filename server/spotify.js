@@ -67,33 +67,7 @@ const FALLBACK_GENRES = [
   ['Jazz', 'Blues', 'Soul'],
 ];
 
-const SIMILAR_MAP = {
-  'coldplay': ['Muse', 'Radiohead', 'OneRepublic', 'Keane', 'Snow Patrol'],
-  'radiohead': ['Muse', 'The Smile', 'Thom Yorke', 'Pixies', 'Sigur Rós'],
-  'taylor swift': ['Selena Gomez', 'Katy Perry', 'Olivia Rodrigo', 'Ariana Grande', 'Ed Sheeran'],
-  'ed sheeran': ['Shawn Mendes', 'James Bay', 'Sam Smith', 'Lewis Capaldi', 'Passenger'],
-  'billie eilish': ['Finneas', 'Lorde', 'Olivia Rodrigo', 'Lana Del Rey', 'Girl in Red'],
-  'the beatles': ['The Rolling Stones', 'The Kinks', 'The Who', 'John Lennon', 'Paul McCartney'],
-  'queen': ['David Bowie', 'Led Zeppelin', 'Elton John', 'Pink Floyd', 'The Who'],
-  'daft punk': ['Justice', 'Deadmau5', 'Kraftwerk', 'Chemical Brothers', 'Disclosure'],
-  'eminem': ['50 Cent', 'Dr. Dre', 'Snoop Dogg', 'Jay-Z', 'Lil Wayne'],
-  'michael jackson': ['Prince', 'Stevie Wonder', 'Janet Jackson', 'Bruno Mars', 'Lionel Richie'],
-  'bruno mars': ['Anderson .Paak', 'Mark Ronson', 'Justin Timberlake', 'Michael Jackson', 'The Weeknd'],
-  'imagine dragons': ['OneRepublic', 'Bastille', 'AWOLNATION', 'X Ambassadors', 'Twenty One Pilots'],
-  'muse': ['Coldplay', 'Radiohead', 'Keane', 'Placebo', 'Royal Blood'],
-  'onerepublic': ['Coldplay', 'Imagine Dragons', 'The Fray', 'Maroon 5', 'Bastille'],
-  'keane': ['Coldplay', 'Snow Patrol', 'The Fray', 'Travis', 'Snow Patrol'],
-  'snow patrol': ['Coldplay', 'Keane', 'The Fray', 'Travis', 'Athlete'],
-  'oasis': ['Blur', 'The Stone Roses', 'Pulp', 'The Verve', 'Liam Gallagher'],
-  'blur': ['Oasis', 'Pulp', 'The Stone Roses', 'Supergrass', 'Gorillaz'],
-  'gorillaz': ['Blur', 'Daft Punk', 'Beck', 'Justice', 'MGMT'],
-  'mgmt': ['Empire of the Sun', 'Foster the People', 'Passion Pit', 'Phoenix', 'Miike Snow'],
-  'foster the people': ['MGMT', 'Empire of the Sun', 'Passion Pit', 'Grouplove', 'Phoenix'],
-  'the weeknd': ['Frank Ocean', 'Miguel', 'Bryson Tiller', 'PARTYNEXTDOOR', 'Bruno Mars'],
-  'lana del rey': ['Lorde', 'Billie Eilish', 'Marina', 'Halsey', 'Florence + The Machine'],
-  'lorde': ['Billie Eilish', 'Lana Del Rey', 'Marina', 'Halsey', 'Florence + The Machine'],
-  'florence + the machine': ['Lana Del Rey', 'Lorde', 'Marina', 'Halsey', 'London Grammar']
-};
+const LASTFM_API_KEY = process.env.LASTFM_API_KEY;
 
 const GENERAL_FALLBACKS = [
   'Coldplay', 'Radiohead', 'Taylor Swift', 'Ed Sheeran', 'Billie Eilish',
@@ -149,13 +123,36 @@ async function getSimilarArtists(id) {
     });
     return response.data.artists;
   } catch (error) {
-    console.warn('Spotify getSimilarArtists failed, trying name search fallback:', error.message);
+    console.warn('Spotify getSimilarArtists failed, trying Last.fm fallback:', error.message);
     try {
       const artist = await getArtistDetails(id);
       const artistNameLower = artist.name.toLowerCase().trim();
       
-      let similarNames = SIMILAR_MAP[artistNameLower];
-      if (!similarNames) {
+      let similarNames = [];
+      if (LASTFM_API_KEY) {
+        try {
+          const lastfmRes = await axios.get('http://ws.audioscrobbler.com/2.0/', {
+            params: {
+              method: 'artist.getsimilar',
+              artist: artist.name,
+              api_key: LASTFM_API_KEY,
+              format: 'json',
+              limit: 5
+            }
+          });
+          if (lastfmRes.data?.similarartists?.artist) {
+            similarNames = lastfmRes.data.similarartists.artist
+              .map(a => a.name)
+              .slice(0, 5);
+            console.log(`Last.fm returned ${similarNames.length} similar artists for ${artist.name}`);
+          }
+        } catch (lfmError) {
+          console.warn('Last.fm similar artists query failed:', lfmError.message);
+        }
+      }
+
+      if (similarNames.length === 0) {
+        console.warn('No similar artists from Last.fm, using general fallbacks');
         similarNames = GENERAL_FALLBACKS
           .filter(name => name.toLowerCase() !== artistNameLower)
           .sort(() => 0.5 - Math.random())
