@@ -2,53 +2,14 @@ import React from 'react';
 
 interface LandingPageProps {
   onStart: () => void;
-  user: any | null;
-  onLoginClick: () => void;
-  onLogout: () => void;
 }
 
-export const LandingPage: React.FC<LandingPageProps> = ({ onStart, user, onLoginClick, onLogout }) => {
+export const LandingPage: React.FC<LandingPageProps> = ({ onStart }) => {
   return (
     <div className="relative min-h-screen w-full bg-slate-950 text-white flex flex-col justify-between overflow-hidden">
       {/* Background Ambient Glows */}
       <div className="absolute top-[-10%] left-[-10%] w-[60%] h-[60%] rounded-full bg-green-500/10 blur-[130px] pointer-events-none" />
       <div className="absolute bottom-[-10%] right-[-10%] w-[60%] h-[60%] rounded-full bg-emerald-500/10 blur-[130px] pointer-events-none" />
-
-      {/* Header */}
-      <header className="w-full max-w-7xl mx-auto px-6 py-6 flex justify-between items-center z-10">
-        <div className="flex items-center gap-2.5">
-          <div className="w-9 h-9 rounded-xl bg-green-500/20 flex items-center justify-center border border-green-500/30">
-            <svg className="w-5 h-5 text-green-500 animate-pulse" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
-            </svg>
-          </div>
-          <span className="font-semibold text-lg tracking-wider bg-gradient-to-r from-white to-gray-300 bg-clip-text text-transparent">
-            Music Discovery Map
-          </span>
-        </div>
-        
-        {/* Auth Actions on Landing */}
-        <div className="flex items-center">
-          {user ? (
-            <div className="flex items-center gap-4">
-              <span className="text-sm font-semibold text-gray-300">Hello, {user.username}</span>
-              <button 
-                onClick={onLogout}
-                className="bg-white/5 border border-white/10 hover:bg-white/10 hover:border-white/20 px-4 py-2 rounded-full text-xs font-bold tracking-wider uppercase transition cursor-pointer text-gray-300 hover:text-white"
-              >
-                Sign Out
-              </button>
-            </div>
-          ) : (
-            <button 
-              onClick={onLoginClick}
-              className="bg-green-500 hover:bg-green-400 text-black px-6 py-2 rounded-full text-xs font-bold uppercase tracking-wider transition duration-300 transform hover:scale-105 active:scale-95 cursor-pointer"
-            >
-              Sign In
-            </button>
-          )}
-        </div>
-      </header>
 
       {/* Main Hero & Description */}
       <main className="flex-grow flex flex-col items-center justify-center text-center px-6 max-w-5xl mx-auto z-10 my-16">
