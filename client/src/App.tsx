@@ -186,8 +186,12 @@ const App: React.FC = () => {
     localStorage.removeItem('token');
     setSavedGraphs([]);
     setLikedGraphs([]);
+    setNodes([]);
+    setEdges([]);
     setCurrentGraphId(null);
     setLoadedGraph(null);
+    setSelectedArtist(null);
+    setIsDirty(false);
   };
 
   // Saved Maps Graph Actions
@@ -351,6 +355,12 @@ const App: React.FC = () => {
     
     if (isDirty) {
       showConfirm("Are you sure? You have unsaved changes.", () => {
+        setNodes([]);
+        setEdges([]);
+        setCurrentGraphId(null);
+        setLoadedGraph(null);
+        setSelectedArtist(null);
+        setIsDirty(false);
         navigateToView(targetView);
       });
     } else {
