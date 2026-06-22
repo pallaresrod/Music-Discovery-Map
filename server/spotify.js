@@ -102,9 +102,36 @@ async function getArtistDetails(id) {
     
     // Enrich details if missing genres or popularity (due to Client Credentials flow)
     if (!artist.genres || artist.genres.length === 0) {
-      const genreIndex = getStableHash(artist.id || artist.name) % FALLBACK_GENRES.length;
-      artist.genres = FALLBACK_GENRES[genreIndex];
+      let realGenres = [];
+      if (LASTFM_API_KEY) {
+        try {
+          const lastfmRes = await axios.get('http://ws.audioscrobbler.com/2.0/', {
+            params: {
+              method: 'artist.getinfo',
+              artist: artist.name,
+              api_key: LASTFM_API_KEY,
+              format: 'json'
+            }
+          });
+          if (lastfmRes.data?.artist?.tags?.tag) {
+            const tags = lastfmRes.data.artist.tags.tag.map(t => t.name);
+            realGenres = tags
+              .map(name => name.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' '))
+              .slice(0, 3);
+          }
+        } catch (lfmError) {
+          console.warn('Last.fm artist info failed for genres:', lfmError.message);
+        }
+      }
+
+      if (realGenres.length > 0) {
+        artist.genres = realGenres;
+      } else {
+        const genreIndex = getStableHash(artist.id || artist.name) % FALLBACK_GENRES.length;
+        artist.genres = FALLBACK_GENRES[genreIndex];
+      }
     }
+    
     if (artist.popularity === undefined || artist.popularity === null) {
       artist.popularity = (getStableHash(artist.id || artist.name) % 35) + 60; // 60 to 94
     }
@@ -116,89 +143,69 @@ async function getArtistDetails(id) {
 }
 
 async function getSimilarArtists(id) {
-  const token = await getAccessToken();
   try {
-    const response = await axios.get(`https://api.spotify.com/v1/artists/${id}/related-artists`, {
-      headers: { 'Authorization': `Bearer ${token}` }
-    });
-    return response.data.artists;
-  } catch (error) {
-    console.warn('Spotify getSimilarArtists failed, trying Last.fm fallback:', error.message);
-    try {
-      const artist = await getArtistDetails(id);
-      const artistNameLower = artist.name.toLowerCase().trim();
-      
-      let similarNames = [];
-      if (LASTFM_API_KEY) {
-        try {
-          const lastfmRes = await axios.get('http://ws.audioscrobbler.com/2.0/', {
-            params: {
-              method: 'artist.getsimilar',
-              artist: artist.name,
-              api_key: LASTFM_API_KEY,
-              format: 'json',
-              limit: 5
-            }
-          });
-          if (lastfmRes.data?.similarartists?.artist) {
-            similarNames = lastfmRes.data.similarartists.artist
-              .map(a => a.name)
-              .slice(0, 5);
-            console.log(`Last.fm returned ${similarNames.length} similar artists for ${artist.name}`);
+    const artist = await getArtistDetails(id);
+    const artistNameLower = artist.name.toLowerCase().trim();
+    
+    let similarNames = [];
+    if (LASTFM_API_KEY) {
+      try {
+        const lastfmRes = await axios.get('http://ws.audioscrobbler.com/2.0/', {
+          params: {
+            method: 'artist.getsimilar',
+            artist: artist.name,
+            api_key: LASTFM_API_KEY,
+            format: 'json',
+            limit: 5
           }
-        } catch (lfmError) {
-          console.warn('Last.fm similar artists query failed:', lfmError.message);
+        });
+        if (lastfmRes.data?.similarartists?.artist) {
+          similarNames = lastfmRes.data.similarartists.artist
+            .map(a => a.name)
+            .slice(0, 5);
         }
+      } catch (lfmError) {
+        console.warn('Last.fm similar artists query failed:', lfmError.message);
       }
-
-      if (similarNames.length === 0) {
-        console.warn('No similar artists from Last.fm, using general fallbacks');
-        similarNames = GENERAL_FALLBACKS
-          .filter(name => name.toLowerCase() !== artistNameLower)
-          .sort(() => 0.5 - Math.random())
-          .slice(0, 5);
-      }
-      
-      const profiles = await Promise.all(similarNames.map(name => searchArtistProfile(name)));
-      const validProfiles = profiles.filter(p => p !== null);
-      
-      return validProfiles.map(p => {
-        if (!p.genres || p.genres.length === 0) {
-          p.genres = FALLBACK_GENRES[getStableHash(p.id) % FALLBACK_GENRES.length];
-        }
-        if (p.popularity === undefined || p.popularity === null) {
-          p.popularity = (getStableHash(p.id) % 35) + 60;
-        }
-        return p;
-      });
-    } catch (fallbackError) {
-      console.error('Similar artists fallback failed:', fallbackError.message);
-      return [];
     }
+
+    if (similarNames.length === 0) {
+      similarNames = GENERAL_FALLBACKS
+        .filter(name => name.toLowerCase() !== artistNameLower)
+        .sort(() => 0.5 - Math.random())
+        .slice(0, 5);
+    }
+    
+    const profiles = await Promise.all(similarNames.map(name => searchArtistProfile(name)));
+    const validProfiles = profiles.filter(p => p !== null);
+    
+    return validProfiles.map(p => {
+      if (!p.genres || p.genres.length === 0) {
+        p.genres = FALLBACK_GENRES[getStableHash(p.id) % FALLBACK_GENRES.length];
+      }
+      if (p.popularity === undefined || p.popularity === null) {
+        p.popularity = (getStableHash(p.id) % 35) + 60;
+      }
+      return p;
+    });
+  } catch (fallbackError) {
+    console.error('Similar artists fallback failed:', fallbackError.message);
+    return [];
   }
 }
 
 async function getArtistTopTracks(id) {
   const token = await getAccessToken();
   try {
-    const response = await axios.get(`https://api.spotify.com/v1/artists/${id}/top-tracks`, {
+    const artist = await getArtistDetails(id);
+    const searchResponse = await axios.get('https://api.spotify.com/v1/search', {
       headers: { 'Authorization': `Bearer ${token}` },
-      params: { market: 'US' }
+      params: { q: `artist:"${artist.name}"`, type: 'track', limit: 5 }
     });
-    return response.data.tracks;
+    return searchResponse.data.tracks.items;
   } catch (error) {
-    console.warn('Spotify getArtistTopTracks failed, trying search fallback:', error.message);
-    try {
-      const artist = await getArtistDetails(id);
-      const searchResponse = await axios.get('https://api.spotify.com/v1/search', {
-        headers: { 'Authorization': `Bearer ${token}` },
-        params: { q: `artist:"${artist.name}"`, type: 'track', limit: 5 }
-      });
-      return searchResponse.data.tracks.items;
-    } catch (fallbackError) {
-      console.error('Track search fallback failed:', fallbackError.message);
-      return [];
-    }
+    console.error('Track search fallback failed:', error.message);
+    return [];
   }
 }
 
