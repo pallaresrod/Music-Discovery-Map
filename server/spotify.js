@@ -76,8 +76,24 @@ async function getSimilarArtists(id) {
   }
 }
 
+async function getArtistTopTracks(id) {
+  const token = await getAccessToken();
+  try {
+    const response = await axios.get(`https://api.spotify.com/v1/artists/${id}/top-tracks`, {
+      headers: { 'Authorization': `Bearer ${token}` },
+      params: { market: 'US' }
+    });
+    return response.data.tracks;
+  } catch (error) {
+    console.error('Error getting artist top tracks', error.response ? error.response.data : error.message);
+    throw error;
+  }
+}
+
 module.exports = {
   searchArtists,
   getArtistDetails,
-  getSimilarArtists
+  getSimilarArtists,
+  getArtistTopTracks
 };
+

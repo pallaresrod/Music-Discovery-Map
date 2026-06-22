@@ -41,6 +41,15 @@ app.get('/api/artists/:id/similar', async (req, res) => {
   }
 });
 
+app.get('/api/artists/:id/top-tracks', async (req, res) => {
+  try {
+    const tracks = await spotify.getArtistTopTracks(req.params.id);
+    res.json(tracks);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to get artist top tracks' });
+  }
+});
+
 // Basic health check
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', message: 'Music Discovery Map API is running' });
