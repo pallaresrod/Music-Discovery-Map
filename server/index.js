@@ -264,6 +264,75 @@ app.get('/api/graphs/:id', (req, res) => {
   });
 });
 
+app.put('/api/graphs/:id', authenticateToken, (req, res) => {
+  const graphId = req.params.id;
+  const { nodes, edges } = req.body;
+  const userId = req.user.id;
+
+  if (!nodes) {
+    return res.status(400).json({ error: 'Nodes are required' });
+  }
+
+  db.get(`SELECT user_id FROM graphs WHERE id = ?`, [graphId], (err, graph) => {
+    if (err) return res.status(500).json({ error: 'Database search error' });
+    if (!graph) return res.status(404).json({ error: 'Graph not found' });
+    if (graph.user_id !== userId) {
+      return res.status(403).json({ error: 'Forbidden: You do not own this graph' });
+    }
+
+    db.serialize(() => {
+      db.run(`DELETE FROM graph_nodes WHERE graph_id = ?`, [graphId]);
+      db.run(`DELETE FROM graph_edges WHERE graph_id = ?`, [graphId]);
+
+      let insertErr = null;
+
+      // Insert artists first (to satisfy FKs)
+      nodes.forEach(node => {
+        db.run(
+          `INSERT OR IGNORE INTO artists (id, name) VALUES (?, ?)`,
+          [node.id, node.data?.label || 'Unknown Artist'],
+          (err) => {
+            if (err) insertErr = err;
+          }
+        );
+      });
+
+      // Insert nodes
+      nodes.forEach(node => {
+        db.run(
+          `INSERT INTO graph_nodes (graph_id, artist_id, x, y) VALUES (?, ?, ?, ?)`,
+          [graphId, node.id, node.position?.x || 0, node.position?.y || 0],
+          (err) => {
+            if (err) insertErr = err;
+          }
+        );
+      });
+
+      // Insert edges
+      if (edges && edges.length > 0) {
+        edges.forEach(edge => {
+          db.run(
+            `INSERT INTO graph_edges (graph_id, source_id, target_id) VALUES (?, ?, ?)`,
+            [graphId, edge.source, edge.target],
+            (err) => {
+              if (err) insertErr = err;
+            }
+          );
+        });
+      }
+
+      // Barrier query to check completion
+      db.run(`SELECT 1`, (err) => {
+        if (insertErr || err) {
+          console.error('Failed to update graph details:', insertErr || err);
+          return res.status(500).json({ error: 'Failed to update graph details' });
+        }
+        res.json({ success: true, message: 'Graph updated successfully' });
+      });
+    });
+  });
+});
+
 app.put('/api/graphs/:id/privacy', authenticateToken, (req, res) => {
   const graphId = req.params.id;
   const { isPublic } = req.body;

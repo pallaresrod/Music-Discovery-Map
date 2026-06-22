@@ -21,6 +21,7 @@ const App: React.FC = () => {
   const [view, setView] = useState<'landing' | 'map'>('landing');
   const [nodes, setNodes] = useState<Node[]>([]);
   const [edges, setEdges] = useState<Edge[]>([]);
+  const [isDirty, setIsDirty] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [selectedArtist, setSelectedArtist] = useState<any>(null);
@@ -53,6 +54,7 @@ const App: React.FC = () => {
   const [newMapName, setNewMapName] = useState('');
   const [newMapPublic, setNewMapPublic] = useState(true);
   const [currentGraphId, setCurrentGraphId] = useState<number | null>(null);
+  const [loadedGraph, setLoadedGraph] = useState<any>(null);
 
   // Social Panel Controls
   const [socialPanelOpen, setSocialPanelOpen] = useState(false);
@@ -64,6 +66,51 @@ const App: React.FC = () => {
   const [aboutMeInput, setAboutMeInput] = useState('');
   const [genresInput, setGenresInput] = useState('');
   const [songsInput, setSongsInput] = useState('');
+
+  // ==========================================
+  // Custom Toasts & Custom Confirm Dialog States
+  // ==========================================
+  interface Toast {
+    id: string;
+    message: string;
+    type: 'success' | 'error' | 'info';
+  }
+  const [toasts, setToasts] = useState<Toast[]>([]);
+
+  const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
+    const id = Math.random().toString(36).substring(2, 9);
+    setToasts((prev) => [...prev, { id, message, type }]);
+    setTimeout(() => {
+      setToasts((prev) => prev.filter((t) => t.id !== id));
+    }, 4000);
+  };
+
+  interface ConfirmDialogState {
+    isOpen: boolean;
+    message: string;
+    onConfirm: () => void;
+    onCancel?: () => void;
+  }
+  const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState>({
+    isOpen: false,
+    message: '',
+    onConfirm: () => {},
+  });
+
+  const showConfirm = (message: string, onConfirm: () => void, onCancel?: () => void) => {
+    setConfirmDialog({
+      isOpen: true,
+      message,
+      onConfirm: () => {
+        onConfirm();
+        setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
+      },
+      onCancel: () => {
+        if (onCancel) onCancel();
+        setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
+      },
+    });
+  };
 
   // ==========================================
   // Helpers & API Calls
@@ -127,6 +174,7 @@ const App: React.FC = () => {
     localStorage.removeItem('token');
     setSavedGraphs([]);
     setCurrentGraphId(null);
+    setLoadedGraph(null);
   };
 
   // Saved Maps Graph Actions
@@ -140,34 +188,110 @@ const App: React.FC = () => {
   };
 
   const handleSaveMap = async () => {
+    // In-place update check
+    if (loadedGraph && user && loadedGraph.user_id === user.id) {
+      try {
+        await axios.put(`${API_BASE_URL}/graphs/${loadedGraph.id}`, {
+          nodes,
+          edges
+        }, getAuthHeaders());
+        
+        setNodes([]);
+        setEdges([]);
+        setCurrentGraphId(null);
+        setLoadedGraph(null);
+        setSelectedArtist(null);
+        setIsDirty(false);
+        setSaveMapModalOpen(false);
+        fetchSavedGraphs();
+        showToast('Map updated successfully!', 'success');
+      } catch (err: any) {
+        showToast(err.response?.data?.error || 'Failed to update graph', 'error');
+      }
+      return;
+    }
+
+    // Creating new saved map
     if (!newMapName.trim()) return;
     try {
-      const res = await axios.post(`${API_BASE_URL}/graphs`, {
+      await axios.post(`${API_BASE_URL}/graphs`, {
         name: newMapName,
         nodes,
         edges,
         isPublic: newMapPublic
       }, getAuthHeaders());
       
-      setCurrentGraphId(res.data.graphId);
+      setNodes([]);
+      setEdges([]);
+      setCurrentGraphId(null);
+      setLoadedGraph(null);
+      setSelectedArtist(null);
+      setIsDirty(false);
       setSaveMapModalOpen(false);
       fetchSavedGraphs();
-      alert('Map saved successfully!');
+      showToast('Map saved successfully!', 'success');
     } catch (err: any) {
-      alert(err.response?.data?.error || 'Failed to save graph');
+      showToast(err.response?.data?.error || 'Failed to save graph', 'error');
+    }
+  };
+
+  const handleSaveMapClick = () => {
+    if (loadedGraph && user && loadedGraph.user_id === user.id) {
+      handleSaveMap();
+    } else {
+      setNewMapName('');
+      setNewMapPublic(true);
+      setSaveMapModalOpen(true);
     }
   };
 
   const handleLoadMap = async (graphId: number) => {
-    try {
-      const res = await axios.get(`${API_BASE_URL}/graphs/${graphId}`, getAuthHeaders());
-      setNodes(res.data.nodes);
-      setEdges(res.data.edges);
-      setCurrentGraphId(graphId);
+    const load = async () => {
+      try {
+        const res = await axios.get(`${API_BASE_URL}/graphs/${graphId}`, getAuthHeaders());
+        setNodes(res.data.nodes);
+        setEdges(res.data.edges);
+        setCurrentGraphId(graphId);
+        setLoadedGraph(res.data.graph);
+        setSelectedArtist(null);
+        setMyMapsOpen(false);
+        setIsDirty(false);
+        showToast('Map loaded successfully!', 'success');
+      } catch (err: any) {
+        showToast(err.response?.data?.error || 'Failed to load graph', 'error');
+      }
+    };
+
+    if (isDirty) {
+      showConfirm("Are you sure? You have unsaved changes.", load);
+    } else {
+      await load();
+    }
+  };
+
+  const handleClearMap = () => {
+    const clear = () => {
+      setNodes([]);
+      setEdges([]);
+      setCurrentGraphId(null);
+      setLoadedGraph(null);
       setSelectedArtist(null);
-      setMyMapsOpen(false);
-    } catch (err: any) {
-      alert(err.response?.data?.error || 'Failed to load graph');
+      setIsDirty(false);
+      showToast('Map cleared', 'info');
+    };
+
+    if (isDirty) {
+      showConfirm("Are you sure? You have unsaved changes.", clear);
+    } else {
+      clear();
+    }
+  };
+
+  const handleGoHome = () => {
+    if (isDirty) {
+      showConfirm("Are you sure? You have unsaved changes.", () => setView('landing'));
+    } else {
+      setView('landing');
     }
   };
 
@@ -177,22 +301,26 @@ const App: React.FC = () => {
         isPublic: !isCurrentlyPublic
       }, getAuthHeaders());
       fetchSavedGraphs();
+      showToast('Privacy settings updated!', 'success');
     } catch (err: any) {
-      alert(err.response?.data?.error || 'Failed to update visibility');
+      showToast(err.response?.data?.error || 'Failed to update visibility', 'error');
     }
   };
 
   const handleDeleteMap = async (graphId: number) => {
-    if (!confirm('Are you sure you want to delete this map?')) return;
-    try {
-      await axios.delete(`${API_BASE_URL}/graphs/${graphId}`, getAuthHeaders());
-      if (currentGraphId === graphId) {
-        setCurrentGraphId(null);
+    showConfirm('Are you sure you want to delete this map?', async () => {
+      try {
+        await axios.delete(`${API_BASE_URL}/graphs/${graphId}`, getAuthHeaders());
+        if (currentGraphId === graphId) {
+          setCurrentGraphId(null);
+          setLoadedGraph(null);
+        }
+        fetchSavedGraphs();
+        showToast('Map deleted successfully', 'success');
+      } catch (err: any) {
+        showToast(err.response?.data?.error || 'Failed to delete graph', 'error');
       }
-      fetchSavedGraphs();
-    } catch (err: any) {
-      alert(err.response?.data?.error || 'Failed to delete graph');
-    }
+    });
   };
 
   // Social / Followers Actions
@@ -209,8 +337,10 @@ const App: React.FC = () => {
     try {
       if (isFollowed) {
         await axios.delete(`${API_BASE_URL}/users/${targetId}/follow`, getAuthHeaders());
+        showToast('Unfollowed user', 'info');
       } else {
         await axios.post(`${API_BASE_URL}/users/${targetId}/follow`, {}, getAuthHeaders());
+        showToast('Followed user!', 'success');
       }
       
       if (selectedUserProfile && selectedUserProfile.user.id === targetId) {
@@ -219,7 +349,7 @@ const App: React.FC = () => {
         fetchUsersList();
       }
     } catch (err: any) {
-      alert(err.response?.data?.error || 'Action failed');
+      showToast(err.response?.data?.error || 'Action failed', 'error');
     }
   };
 
@@ -228,7 +358,7 @@ const App: React.FC = () => {
       const res = await axios.get(`${API_BASE_URL}/users/${targetId}/profile`, getAuthHeaders());
       setSelectedUserProfile(res.data);
     } catch (err: any) {
-      alert(err.response?.data?.error || 'Failed to load profile');
+      showToast(err.response?.data?.error || 'Failed to load profile', 'error');
     }
   };
 
@@ -248,15 +378,30 @@ const App: React.FC = () => {
         favorite_songs: songsInput
       }));
       setProfileEditorOpen(false);
-      alert('Profile updated successfully!');
+      showToast('Profile updated successfully!', 'success');
     } catch (err: any) {
-      alert(err.response?.data?.error || 'Failed to update profile');
+      showToast(err.response?.data?.error || 'Failed to update profile', 'error');
     }
   };
 
-  const onNodesChange: OnNodesChange = (changes) => setNodes((nds) => applyNodeChanges(changes, nds));
-  const onEdgesChange: OnEdgesChange = (changes) => setEdges((eds) => applyEdgeChanges(changes, eds));
-  const onConnect = (params: Connection) => setEdges((eds) => addEdge(params, eds));
+  const onNodesChange: OnNodesChange = (changes) => {
+    setNodes((nds) => applyNodeChanges(changes, nds));
+    const hasRealChanges = changes.some(c => c.type === 'position' || c.type === 'remove' || c.type === 'add');
+    if (hasRealChanges) {
+      setIsDirty(true);
+    }
+  };
+  const onEdgesChange: OnEdgesChange = (changes) => {
+    setEdges((eds) => applyEdgeChanges(changes, eds));
+    const hasRealChanges = changes.some(c => c.type === 'remove' || c.type === 'add');
+    if (hasRealChanges) {
+      setIsDirty(true);
+    }
+  };
+  const onConnect = (params: Connection) => {
+    setEdges((eds) => addEdge(params, eds));
+    setIsDirty(true);
+  };
 
   // Audio Playback Listeners & Cleanup
   useEffect(() => {
@@ -364,8 +509,11 @@ const App: React.FC = () => {
         newEdges.push(newEdge);
       });
 
-      setNodes((nds) => [...nds, ...newNodes]);
-      setEdges((eds) => [...eds, ...newEdges]);
+      if (newNodes.length > 0 || newEdges.length > 0) {
+        setNodes((nds) => [...nds, ...newNodes]);
+        setEdges((eds) => [...eds, ...newEdges]);
+        setIsDirty(true);
+      }
     } catch (error) {
       console.error('Error expanding artist', error);
     }
@@ -400,6 +548,7 @@ const App: React.FC = () => {
             style: { stroke: '#1db954' }
           };
           setEdges((eds) => [...eds, newEdge]);
+          setIsDirty(true);
         }
       }
       return;
@@ -440,6 +589,7 @@ const App: React.FC = () => {
       setEdges((eds) => [...eds, newEdge]);
     }
 
+    setIsDirty(true);
     setSearchResults([]);
     setSearchQuery('');
   };
@@ -463,7 +613,7 @@ const App: React.FC = () => {
       <header className="p-4 bg-gray-800 flex items-center justify-between shadow-md z-10">
         <div className="flex items-center gap-4">
           <h1 
-            onClick={() => setView('landing')} 
+            onClick={handleGoHome} 
             className="text-2xl font-bold text-green-500 cursor-pointer hover:text-green-400 transition"
           >
             Music Discovery Map
@@ -559,26 +709,34 @@ const App: React.FC = () => {
       <main className="flex-grow flex relative overflow-hidden">
         <div className="flex-grow h-full relative">
           
-          {/* Floating Saved Map Info for Authenticated Users */}
-          {user && (
-            <div className="absolute top-4 left-4 z-10 flex gap-2">
+          {/* Floating Map Controls */}
+          <div className="absolute top-4 left-4 z-10 flex gap-2">
+            {user && (
+              <>
+                <button 
+                  onClick={handleSaveMapClick}
+                  className="bg-gray-800/90 hover:bg-gray-700 backdrop-blur border border-white/10 px-4 py-2.5 rounded-xl text-xs font-bold text-green-500 transition shadow-lg flex items-center gap-1.5 cursor-pointer"
+                >
+                  💾 Save Map
+                </button>
+                {currentGraphId && (
+                  <span className="bg-gray-800/90 border border-white/10 px-3 py-2.5 rounded-xl text-[10px] font-semibold text-gray-400 backdrop-blur shadow-lg flex items-center">
+                    Map ID: {currentGraphId}
+                  </span>
+                )}
+              </>
+            )}
+            
+            {/* Clear Map button (visible when there are nodes) */}
+            {nodes.length > 0 && (
               <button 
-                onClick={() => {
-                  setNewMapName('');
-                  setNewMapPublic(true);
-                  setSaveMapModalOpen(true);
-                }}
-                className="bg-gray-800/90 hover:bg-gray-700 backdrop-blur border border-white/10 px-4 py-2.5 rounded-xl text-xs font-bold text-green-500 transition shadow-lg flex items-center gap-1.5 cursor-pointer"
+                onClick={handleClearMap}
+                className="bg-gray-800/90 hover:bg-red-500/10 hover:text-red-400 border border-white/10 hover:border-red-500/20 px-4 py-2.5 rounded-xl text-xs font-bold text-gray-300 transition shadow-lg flex items-center gap-1.5 cursor-pointer"
               >
-                💾 Save Map
+                🗑️ Clear Map
               </button>
-              {currentGraphId && (
-                <span className="bg-gray-800/90 border border-white/10 px-3 py-2.5 rounded-xl text-[10px] font-semibold text-gray-400 backdrop-blur shadow-lg flex items-center">
-                  Map ID: {currentGraphId}
-                </span>
-              )}
-            </div>
-          )}
+            )}
+          </div>
 
           <ReactFlow
             nodes={nodes}
@@ -1265,6 +1423,85 @@ const App: React.FC = () => {
                   )}
                 </div>
               )}
+            </div>
+          </div>
+        )}
+
+        {/* ==========================================
+            6. Custom Toast Notifications
+        ========================================== */}
+        <div className="fixed bottom-4 right-4 z-[9999] flex flex-col gap-3 pointer-events-none max-w-sm w-full">
+          {toasts.map((toast) => {
+            const isSuccess = toast.type === 'success';
+            const isError = toast.type === 'error';
+            return (
+              <div
+                key={toast.id}
+                className={`pointer-events-auto flex items-center gap-3 px-4.5 py-3.5 rounded-2xl border backdrop-blur-md shadow-2xl transition-all duration-300 animate-slide-in-right ${
+                  isSuccess
+                    ? 'bg-green-950/90 border-green-500/30 text-green-400'
+                    : isError
+                    ? 'bg-red-950/90 border-red-500/30 text-red-400'
+                    : 'bg-slate-900/95 border-white/10 text-gray-200'
+                }`}
+              >
+                {/* Icon */}
+                {isSuccess && (
+                  <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                )}
+                {isError && (
+                  <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+                  </svg>
+                )}
+                {!isSuccess && !isError && (
+                  <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 111.063.852l-.708 2.836a.75.75 0 001.063.852l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12v-.008z" />
+                  </svg>
+                )}
+                {/* Message */}
+                <span className="text-xs font-bold tracking-wide">{toast.message}</span>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* ==========================================
+            7. Custom Confirm Dialog Modal
+        ========================================== */}
+        {confirmDialog.isOpen && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[10000] flex items-center justify-center p-4">
+            <div className="bg-gray-950 border border-white/10 w-full max-w-sm rounded-3xl p-6 shadow-2xl relative text-center flex flex-col items-center animate-pulse-once">
+              {/* Alert Warning Icon */}
+              <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-500 flex items-center justify-center mb-4 animate-bounce-subtle">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+                </svg>
+              </div>
+
+              {/* Message */}
+              <h3 className="text-base font-bold text-white mb-2">Are you sure?</h3>
+              <p className="text-xs text-gray-400 leading-relaxed mb-6">
+                {confirmDialog.message}
+              </p>
+
+              {/* Buttons */}
+              <div className="flex gap-3 w-full">
+                <button
+                  onClick={confirmDialog.onCancel}
+                  className="flex-grow bg-white/5 border border-white/10 hover:bg-white/10 hover:border-white/20 active:scale-95 text-gray-300 hover:text-white font-bold py-2.5 rounded-xl transition duration-150 cursor-pointer text-xs uppercase tracking-wider"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmDialog.onConfirm}
+                  className="flex-grow bg-green-500 hover:bg-green-400 active:scale-95 text-black font-bold py-2.5 rounded-xl transition duration-150 cursor-pointer text-xs uppercase tracking-wider hover:shadow-[0_0_20px_rgba(34,197,94,0.3)]"
+                >
+                  Confirm
+                </button>
+              </div>
             </div>
           </div>
         )}
