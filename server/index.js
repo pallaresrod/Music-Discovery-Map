@@ -197,6 +197,24 @@ app.get('/api/graphs', authenticateToken, (req, res) => {
   );
 });
 
+app.get('/api/graphs/liked', authenticateToken, (req, res) => {
+  const userId = req.user.id;
+
+  db.all(
+    `SELECT g.id, g.name, g.created_at, g.is_public, u.username as creator_name 
+     FROM liked_graphs lg 
+     JOIN graphs g ON lg.graph_id = g.id 
+     JOIN users u ON g.user_id = u.id 
+     WHERE lg.user_id = ? 
+     ORDER BY lg.created_at DESC`,
+    [userId],
+    (err, graphs) => {
+      if (err) return res.status(500).json({ error: 'Failed to query liked graphs' });
+      res.json(graphs);
+    }
+  );
+});
+
 app.get('/api/graphs/:id', (req, res) => {
   const graphId = req.params.id;
   
@@ -377,6 +395,42 @@ app.delete('/api/graphs/:id', authenticateToken, (req, res) => {
   });
 });
 
+app.post('/api/graphs/:id/like', authenticateToken, (req, res) => {
+  const graphId = req.params.id;
+  const userId = req.user.id;
+
+  db.get(`SELECT user_id, is_public FROM graphs WHERE id = ?`, [graphId], (err, graph) => {
+    if (err) return res.status(500).json({ error: 'Database search error' });
+    if (!graph) return res.status(404).json({ error: 'Graph not found' });
+    if (graph.is_public === 0 && graph.user_id !== userId) {
+      return res.status(403).json({ error: 'Forbidden: You cannot like a private map' });
+    }
+
+    db.run(
+      `INSERT OR IGNORE INTO liked_graphs (user_id, graph_id) VALUES (?, ?)`,
+      [userId, graphId],
+      (err) => {
+        if (err) return res.status(500).json({ error: 'Failed to like map' });
+        res.json({ success: true, message: 'Map liked successfully' });
+      }
+    );
+  });
+});
+
+app.delete('/api/graphs/:id/like', authenticateToken, (req, res) => {
+  const graphId = req.params.id;
+  const userId = req.user.id;
+
+  db.run(
+    `DELETE FROM liked_graphs WHERE user_id = ? AND graph_id = ?`,
+    [userId, graphId],
+    (err) => {
+      if (err) return res.status(500).json({ error: 'Failed to unlike map' });
+      res.json({ success: true, message: 'Map unliked successfully' });
+    }
+  );
+});
+
 // ==========================================
 // 3. User Profile & Social Routes
 // ==========================================
@@ -450,8 +504,12 @@ app.get('/api/users/:id/profile', (req, res) => {
 
           // Get public graphs of this user
           db.all(
-            `SELECT id, name, created_at, is_public FROM graphs WHERE user_id = ? AND is_public = 1 ORDER BY created_at DESC`,
-            [profileId],
+            `SELECT g.id, g.name, g.created_at, g.is_public, 
+                    (SELECT 1 FROM liked_graphs WHERE user_id = ? AND graph_id = g.id) as is_liked 
+             FROM graphs g 
+             WHERE g.user_id = ? AND g.is_public = 1 
+             ORDER BY g.created_at DESC`,
+            [currentUserId, profileId],
             (err, graphs) => {
               if (err) return res.status(500).json({ error: 'Database graphs error' });
 

@@ -54,6 +54,8 @@ const App: React.FC = () => {
   const [newMapPublic, setNewMapPublic] = useState(true);
   const [currentGraphId, setCurrentGraphId] = useState<number | null>(null);
   const [loadedGraph, setLoadedGraph] = useState<any>(null);
+  const [likedGraphs, setLikedGraphs] = useState<any[]>([]);
+  const [savedMapsSubTab, setSavedMapsSubTab] = useState<'my-maps' | 'liked-maps'>('my-maps');
 
   // Social Panel Controls
   const [usersList, setUsersList] = useState<any[]>([]);
@@ -183,6 +185,7 @@ const App: React.FC = () => {
     setUser(null);
     localStorage.removeItem('token');
     setSavedGraphs([]);
+    setLikedGraphs([]);
     setCurrentGraphId(null);
     setLoadedGraph(null);
   };
@@ -194,6 +197,51 @@ const App: React.FC = () => {
       setSavedGraphs(res.data);
     } catch (err: any) {
       console.error('Failed to load graphs', err.message);
+    }
+  };
+
+  const fetchLikedGraphs = async () => {
+    try {
+      const res = await axios.get(`${API_BASE_URL}/graphs/liked`, getAuthHeaders());
+      setLikedGraphs(res.data);
+    } catch (err: any) {
+      console.error('Failed to load liked graphs', err.message);
+    }
+  };
+
+  const handleLikeMap = async (graphId: number, isCurrentlyLiked: boolean) => {
+    if (!user) {
+      showToast("Please sign in to like maps", "info");
+      setAuthError(null);
+      setAuthMode('login');
+      setAuthModalOpen(true);
+      return;
+    }
+
+    try {
+      if (isCurrentlyLiked) {
+        await axios.delete(`${API_BASE_URL}/graphs/${graphId}/like`, getAuthHeaders());
+        showToast('Map removed from liked maps', 'info');
+      } else {
+        await axios.post(`${API_BASE_URL}/graphs/${graphId}/like`, {}, getAuthHeaders());
+        showToast('Map added to liked maps!', 'success');
+      }
+
+      fetchLikedGraphs();
+      if (selectedUserProfile) {
+        const updatedGraphs = selectedUserProfile.graphs.map((g: any) => {
+          if (g.id === graphId) {
+            return { ...g, is_liked: isCurrentlyLiked ? 0 : 1 };
+          }
+          return g;
+        });
+        setSelectedUserProfile({
+          ...selectedUserProfile,
+          graphs: updatedGraphs
+        });
+      }
+    } catch (err: any) {
+      showToast(err.response?.data?.error || 'Failed to update map like status', 'error');
     }
   };
 
@@ -323,6 +371,7 @@ const App: React.FC = () => {
     
     if (targetView === 'saved-maps' && user) {
       fetchSavedGraphs();
+      fetchLikedGraphs();
     }
     if (targetView === 'explore') {
       fetchUsersList();
@@ -630,9 +679,9 @@ const App: React.FC = () => {
   return (
     <div className="flex flex-col h-screen w-screen bg-gray-950 text-white select-none overflow-hidden">
       {/* 1. Persistent Top Navigation Header */}
-      <header className="p-4 bg-gray-900 border-b border-white/5 flex items-center justify-between shadow-md z-30 w-full flex-shrink-0">
+      <header className="px-6 py-4 bg-gray-900 border-b border-white/5 grid grid-cols-3 items-center shadow-md z-30 w-full flex-shrink-0">
         {/* Left Title */}
-        <div className="flex items-center gap-2.5 cursor-pointer" onClick={() => handleNavigation('landing')}>
+        <div className="flex items-center gap-2.5 cursor-pointer justify-self-start" onClick={() => handleNavigation('landing')}>
           <div className="w-9 h-9 rounded-xl bg-green-500/20 flex items-center justify-center border border-green-500/30">
             <svg className="w-5 h-5 text-green-500 animate-pulse" fill="currentColor" viewBox="0 0 24 24">
               <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
@@ -643,32 +692,35 @@ const App: React.FC = () => {
           </span>
         </div>
 
-        <nav className="flex items-center gap-1 bg-gray-950 p-1 rounded-xl border border-white/5">
-          {[
-            { id: 'map', label: '🗺️ Map' },
-            { id: 'explore', label: '👥 Explore' },
-            { id: 'saved-maps', label: '📁 Saved Maps' },
-            { id: 'account', label: '👤 Account' }
-          ].map((tab) => {
-            const isActive = view === tab.id;
-            return (
-              <button
-                key={tab.id}
-                onClick={() => handleNavigation(tab.id as any)}
-                className={`px-4 py-2 rounded-lg text-xs font-bold transition-all uppercase tracking-wider cursor-pointer select-none ${
-                  isActive
-                    ? 'bg-green-500 text-black shadow-[0_0_15px_rgba(34,197,94,0.3)]'
-                    : 'text-gray-400 hover:text-white hover:bg-white/5'
-                }`}
-              >
-                {tab.label}
-              </button>
-            );
-          })}
-        </nav>
+        {/* Center Navigation Tabs */}
+        <div className="flex justify-center">
+          <nav className="flex items-center gap-1 bg-gray-950 p-1 rounded-xl border border-white/5">
+            {[
+              { id: 'map', label: '🗺️ Map' },
+              { id: 'explore', label: '👥 Explore' },
+              { id: 'saved-maps', label: '📁 Saved Maps' },
+              { id: 'account', label: '👤 Account' }
+            ].map((tab) => {
+              const isActive = view === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => handleNavigation(tab.id as any)}
+                  className={`px-4 py-2 rounded-lg text-xs font-bold transition-all uppercase tracking-wider cursor-pointer select-none ${
+                    isActive
+                      ? 'bg-green-500 text-black shadow-[0_0_15px_rgba(34,197,94,0.3)]'
+                      : 'text-gray-400 hover:text-white hover:bg-white/5'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              );
+            })}
+          </nav>
+        </div>
 
         {/* Right Header Navigation Panel */}
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-4 justify-self-end">
           {user ? (
             <div className="flex items-center gap-3">
               <span className="text-xs font-semibold text-gray-300">Hello, {user.username}</span>
@@ -1179,12 +1231,27 @@ const App: React.FC = () => {
                               <span className="font-bold text-sm text-white block">{graph.name}</span>
                               <span className="text-[10px] text-gray-400 block mt-0.5">Created: {new Date(graph.created_at).toLocaleDateString()}</span>
                             </div>
-                            <button
-                              onClick={() => { handleLoadMap(graph.id); setView('map'); }}
-                              className="bg-green-500 hover:bg-green-400 text-black text-xs font-bold px-3 py-1.5 rounded-lg transition cursor-pointer"
-                            >
-                              View Map
-                            </button>
+                            <div className="flex gap-2 items-center">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleLikeMap(graph.id, graph.is_liked === 1);
+                                }}
+                                className={`text-xs px-3 py-1.5 rounded-lg font-bold border transition cursor-pointer flex items-center gap-1 ${
+                                  graph.is_liked === 1
+                                    ? 'bg-red-500/10 border-red-500/30 text-red-400 hover:bg-red-500/20'
+                                    : 'bg-transparent border-white/10 text-gray-300 hover:text-white hover:bg-white/5'
+                                }`}
+                              >
+                                {graph.is_liked === 1 ? '❤️' : '🤍'}
+                              </button>
+                              <button
+                                onClick={() => { handleLoadMap(graph.id); setView('map'); }}
+                                className="bg-green-500 hover:bg-green-400 text-black text-xs font-bold px-3 py-1.5 rounded-lg transition cursor-pointer"
+                              >
+                                View Map
+                              </button>
+                            </div>
                           </div>
                         ))}
                       </div>
@@ -1212,61 +1279,131 @@ const App: React.FC = () => {
 
         {view === 'saved-maps' && (
           <div className="flex-grow max-w-7xl mx-auto w-full p-6 overflow-y-auto flex flex-col h-full">
-            <h2 className="text-3xl font-black mb-6 bg-gradient-to-r from-white to-gray-400 bg-clip-text text-transparent">My Saved Maps</h2>
-            {savedGraphs.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pb-8">
-                {savedGraphs.map(graph => (
-                  <div 
-                    key={graph.id}
-                    className={`p-5 bg-white/5 border rounded-2xl flex flex-col justify-between gap-4 transition-colors ${currentGraphId === graph.id ? 'border-green-500/30 bg-green-500/5' : 'border-white/5 hover:bg-white/10'}`}
-                  >
-                    <div>
-                      <span className="font-bold text-base block text-white">{graph.name}</span>
-                      <span className="text-[10px] text-gray-400 block mt-1">Saved on: {new Date(graph.created_at).toLocaleDateString()}</span>
+            <h2 className="text-3xl font-black mb-6 bg-gradient-to-r from-white to-gray-400 bg-clip-text text-transparent">Saved Maps</h2>
+            
+            {/* Sub-tabs for My Maps vs Liked Maps */}
+            <div className="flex items-center gap-2 mb-6 border-b border-white/5 pb-3.5">
+              <button
+                onClick={() => setSavedMapsSubTab('my-maps')}
+                className={`px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all cursor-pointer ${
+                  savedMapsSubTab === 'my-maps'
+                    ? 'bg-green-500 text-black shadow-lg shadow-green-500/10'
+                    : 'bg-white/5 text-gray-400 hover:text-white hover:bg-white/10'
+                }`}
+              >
+                📁 My Maps
+              </button>
+              <button
+                onClick={() => setSavedMapsSubTab('liked-maps')}
+                className={`px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all cursor-pointer ${
+                  savedMapsSubTab === 'liked-maps'
+                    ? 'bg-green-500 text-black shadow-lg shadow-green-500/10'
+                    : 'bg-white/5 text-gray-400 hover:text-white hover:bg-white/10'
+                }`}
+              >
+                ❤️ Liked Maps
+              </button>
+            </div>
+
+            {savedMapsSubTab === 'my-maps' ? (
+              savedGraphs.length > 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pb-8">
+                  {savedGraphs.map(graph => (
+                    <div 
+                      key={graph.id}
+                      className={`p-5 bg-white/5 border rounded-2xl flex flex-col justify-between gap-4 transition-colors ${currentGraphId === graph.id ? 'border-green-500/30 bg-green-500/5' : 'border-white/5 hover:bg-white/10'}`}
+                    >
+                      <div>
+                        <span className="font-bold text-base block text-white">{graph.name}</span>
+                        <span className="text-[10px] text-gray-400 block mt-1">Saved on: {new Date(graph.created_at).toLocaleDateString()}</span>
+                      </div>
+                      <div className="flex items-center justify-between border-t border-white/5 pt-3">
+                        <button 
+                          onClick={() => handleTogglePrivacy(graph.id, graph.is_public === 1)}
+                          className="text-xs text-gray-400 hover:text-white flex items-center gap-1 cursor-pointer font-semibold transition"
+                        >
+                          {graph.is_public === 1 ? '🔓 Public' : '🔒 Private'}
+                        </button>
+                        <div className="flex gap-2">
+                          <button 
+                            onClick={() => { handleLoadMap(graph.id); setView('map'); }}
+                            className="bg-green-500 hover:bg-green-400 text-black text-xs font-bold px-3 py-1.5 rounded-lg transition cursor-pointer"
+                          >
+                            Load
+                          </button>
+                          <button 
+                            onClick={() => handleDeleteMap(graph.id)}
+                            className="bg-red-500/10 hover:bg-red-500/20 text-red-400 text-xs font-semibold px-3 py-1.5 rounded-lg border border-red-500/20 transition cursor-pointer"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </div>
                     </div>
-                    <div className="flex items-center justify-between border-t border-white/5 pt-3">
-                      <button 
-                        onClick={() => handleTogglePrivacy(graph.id, graph.is_public === 1)}
-                        className="text-xs text-gray-400 hover:text-white flex items-center gap-1 cursor-pointer font-semibold transition"
-                      >
-                        {graph.is_public === 1 ? '🔓 Public' : '🔒 Private'}
-                      </button>
-                      <div className="flex gap-2">
+                  ))}
+                </div>
+              ) : (
+                <div className="flex-grow flex flex-col items-center justify-center text-center p-6 bg-white/5 border border-white/5 rounded-3xl">
+                  <div className="w-16 h-16 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-gray-500 mb-4">
+                    <svg className="w-8 h-8" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12.75V12A9 9 0 0112 3v0.75m0 8.25V12a3 3 0 11-6 0v0.75" />
+                    </svg>
+                  </div>
+                  <h3 className="text-lg font-bold text-white mb-2">No Saved Maps</h3>
+                  <p className="text-xs text-gray-400 max-w-sm leading-relaxed mb-6">
+                    You haven't archived any exploration maps yet. Head to the Map tab, build a music web, and save it to see it listed here.
+                  </p>
+                  <button
+                    onClick={() => handleNavigation('map')}
+                    className="bg-green-500 hover:bg-green-400 text-black text-xs font-bold px-6 py-2.5 rounded-xl transition cursor-pointer uppercase tracking-wider"
+                  >
+                    Go to Map Canvas
+                  </button>
+                </div>
+              )
+            ) : (
+              likedGraphs.length > 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pb-8">
+                  {likedGraphs.map(graph => (
+                    <div 
+                      key={graph.id}
+                      className="p-5 bg-white/5 border border-white/5 rounded-2xl flex flex-col justify-between gap-4 transition-colors hover:bg-white/10"
+                    >
+                      <div>
+                        <span className="font-bold text-base block text-white">{graph.name}</span>
+                        <span className="text-[10px] text-green-400 block mt-1 font-semibold">Creator: @{graph.creator_name}</span>
+                        <span className="text-[10px] text-gray-400 block mt-0.5">Saved on: {new Date(graph.created_at).toLocaleDateString()}</span>
+                      </div>
+                      <div className="flex items-center justify-between border-t border-white/5 pt-3">
+                        <button 
+                          onClick={() => handleLikeMap(graph.id, true)}
+                          className="text-xs text-red-400 hover:text-red-300 flex items-center gap-1 cursor-pointer font-semibold transition"
+                        >
+                          ❤️ Liked
+                        </button>
                         <button 
                           onClick={() => { handleLoadMap(graph.id); setView('map'); }}
-                          className="bg-green-500 hover:bg-green-400 text-black text-xs font-bold px-3 py-1.5 rounded-lg transition cursor-pointer"
+                          className="bg-green-500 hover:bg-green-400 text-black text-xs font-bold px-4 py-1.5 rounded-lg transition cursor-pointer"
                         >
                           Load
                         </button>
-                        <button 
-                          onClick={() => handleDeleteMap(graph.id)}
-                          className="bg-red-500/10 hover:bg-red-500/20 text-red-400 text-xs font-semibold px-3 py-1.5 rounded-lg border border-red-500/20 transition cursor-pointer"
-                        >
-                          Delete
-                        </button>
                       </div>
                     </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="flex-grow flex flex-col items-center justify-center text-center p-6 bg-white/5 border border-white/5 rounded-3xl">
-                <div className="w-16 h-16 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-gray-500 mb-4">
-                  <svg className="w-8 h-8" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12.75V12A9 9 0 0112 3v0.75m0 8.25V12a3 3 0 11-6 0v0.75" />
-                  </svg>
+                  ))}
                 </div>
-                <h3 className="text-lg font-bold text-white mb-2">No Saved Maps</h3>
-                <p className="text-xs text-gray-400 max-w-sm leading-relaxed mb-6">
-                  You haven't archived any exploration maps yet. Head to the Map tab, build a music web, and save it to see it listed here.
-                </p>
-                <button
-                  onClick={() => handleNavigation('map')}
-                  className="bg-green-500 hover:bg-green-400 text-black text-xs font-bold px-6 py-2.5 rounded-xl transition cursor-pointer uppercase tracking-wider"
-                >
-                  Go to Map Canvas
-                </button>
-              </div>
+              ) : (
+                <div className="flex-grow flex flex-col items-center justify-center text-center p-6 bg-white/5 border border-white/5 rounded-3xl">
+                  <div className="w-16 h-16 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-gray-500 mb-4">
+                    <svg className="w-8 h-8 text-red-500/50" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+                    </svg>
+                  </div>
+                  <h3 className="text-lg font-bold text-white mb-2">No Liked Maps</h3>
+                  <p className="text-xs text-gray-400 max-w-sm leading-relaxed mb-6">
+                    You haven't liked any public maps from other music explorers yet. Head to the Explore tab to find other people's maps!
+                  </p>
+                </div>
+              )
             )}
           </div>
         )}

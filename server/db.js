@@ -85,6 +85,16 @@ db.serialize(() => {
     FOREIGN KEY (user_id) REFERENCES users (id),
     FOREIGN KEY (artist_id) REFERENCES artists (id)
   )`);
+
+  // Liked Graphs
+  db.run(`CREATE TABLE IF NOT EXISTS liked_graphs (
+    user_id INTEGER,
+    graph_id INTEGER,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (user_id, graph_id),
+    FOREIGN KEY (user_id) REFERENCES users (id),
+    FOREIGN KEY (graph_id) REFERENCES graphs (id) ON DELETE CASCADE
+  )`);
   
   console.log('Database schema re-initialized successfully.');
 });
